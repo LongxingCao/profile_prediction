@@ -30,10 +30,7 @@ def parse_args( argv ):
     parser = argparse.ArgumentParser( description = description )
     parser.add_argument('-pdbs', type=str, nargs='*', help='name of the input pdb file')
     parser.add_argument('-pdb_list', type=str, help='a list file of all pdb files')
-    parser.add_argument("-omit_AAs", type=list, help="Specify which amino acids should be omitted in the generated sequence, e.g. 'AC' would omit alanine and cystine.")
     parser.add_argument('-output_path', type=str, default='./', help="the path for the outputs")
-    parser.add_argument('-cum_prob', type=float, default=0.6, help='the cutoff value of the accumulative probability')
-    parser.add_argument('-max_aas_per_pos', type=int, default=20, help='the maximum allowed amino acids at each residue position')
     args = parser.parse_args()
     sys.argv = argv_tmp
 
@@ -111,32 +108,5 @@ for pdb in all_pdbs:
         # batch size 1, so take the first one
     probs = model(feat1d[None,...], feat2d[None,...]).numpy()[0]
 
-    # np.savez_compressed(f"{tag}.npz", pssm=probs)
-
-
-    if args.omit_AAs != None:
-        for aa in  args.omit_AAs:
-            probs[:,AA.index(aa)] = 0
-    prob_sums = np.sum( probs, axis=1 ) + 1e-9
-    probs = probs / prob_sums[:,None]
-
-    # sorting
-    inx_sort = np.argsort(probs, axis=1)[:,::-1]
-    probs_sorted = np.sort(probs, axis=1)[:,::-1]
-    cumsum = np.cumsum(probs_sorted, axis=1)
-
-    resfile = "NATAA\nSTART\n"
-    for idx,v in enumerate(np.argmax(cumsum>=args.cum_prob, axis=1)):
-        good = []
-        v = min(v, args.max_aas_per_pos-1) # use the smaller value
-        for aa_idx in inx_sort[idx,:v+1]:
-            good.append(AA[aa_idx])
-        resfile += "{} A PIKAA {}\n".format(idx+1, "".join(good))
-
-    output_res_file = os.path.join(args.output_path,'{}.resfile'.format(tag))
-    print("Save the resfile to ", output_res_file)
-
-    with open(output_res_file, 'w') as f:
-        f.write(resfile)
-
+    np.savez_compressed(f"{args.output_path}/{tag}.npz", pssm=probs)
 
