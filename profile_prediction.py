@@ -30,6 +30,7 @@ def parse_args( argv ):
     parser = argparse.ArgumentParser( description = description )
     parser.add_argument('-pdbs', type=str, nargs='*', help='name of the input pdb file')
     parser.add_argument('-pdb_list', type=str, help='a list file of all pdb files')
+    parser.add_argument('-pssm_outname', type=str, help='the output name for the pssm file')
     parser.add_argument('-output_path', type=str, default='./', help="the path for the outputs")
     args = parser.parse_args()
     sys.argv = argv_tmp
@@ -108,5 +109,35 @@ for pdb in all_pdbs:
         # batch size 1, so take the first one
     probs = model(feat1d[None,...], feat2d[None,...]).numpy()[0]
 
-    np.savez_compressed(f"{args.output_path}/{tag}.npz", pssm=probs)
+    # Length of chain A
+    L = len(pose.split_by_chain()[1])
+
+    # Get the probability matrix just for chain A
+    prob_cA = probs[:L]
+
+    # Data from BLOSUM62 ncbi-blast-2.6.0+-src/c++/src/algo/blast/composition_adjustment/matrix_frequency_data.c
+    bg_freqs = np.array([7.4216205067993410e-02, 5.1614486141284638e-02, 4.4645808512757915e-02,
+                         5.3626000838554413e-02, 2.4687457167944848e-02, 3.4259650591416023e-02,
+                         5.4311925684587502e-02, 7.4146941452644999e-02, 2.6212984805266227e-02,
+                         6.7917367618953756e-02, 9.8907868497150955e-02, 5.8155682303079680e-02,
+                         2.4990197579643110e-02, 4.7418459742284751e-02, 3.8538003320306206e-02,
+                         5.7229029476494421e-02, 5.0891364550287033e-02, 1.3029956129972148e-02,
+                         3.2281512313758580e-02, 7.2919098205619245e-02])
+    bg_freqs = bg_freqs / bg_freqs.sum()
+
+    # Compute log-odds
+    pssm = np.log(prob_cA/bg_freqs)
+    
+    with open(args.pssm_outname, 'w') as f_out:
+        f_out.write('\n')
+        f_out.write('Last position-specific scoring matrix computed, weighted observed percentages rounded down, information per position, and relative weight of gapless real matches to pseudocounts\n')
+        f_out.write('            A   R   N   D   C   Q   E   G   H   I   L   K   M   F   P   S   T   W   Y   V   A   R   N   D   C   Q   E   G   H   I   L   K   M   F   P   S   T   W   Y   V\n')
+
+        for i, odds in enumerate(pssm):
+            aa = seq[i]
+            pos = str(i+1)
+            odds_str = ' '.join([str(x) for x in pssm[i]])
+            occ_str = ' '.join([str(x) for x in prob_cA[i]])
+            f_out.write(pos+' '+aa+' '+odds_str+' '+occ_str+' 0.00 0.00'+'\n')
+        f_out.write('\n\n\n\n')
 
